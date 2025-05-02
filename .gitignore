@@ -1,0 +1,31 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Output of `go build`
+/bin/
+/build/
+/dist/
+
+# Vendor directory (if using vendoring)
+/vendor/
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+
+# Logs and temp
+*.log
+*.tmp
+*.cache
+*.DS_Store
+
+# Env files (do not commit secrets)
+.env
+.env.*

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+  <soap:Body>
+    <KeyRateResponse xmlns="http://web.cbr.ru/">
+      <KeyRateResult>
+        <diffgram xmlns="urn:schemas-microsoft-com:xml-diffgram-v1">
+          <KeyRate>
+            <KR>
+              <Date>2025-04-19</Date>
+              <Rate>16.00</Rate>
+            </KR>
+          </KeyRate>
+        </diffgram>
+      </KeyRateResult>
+    </KeyRateResponse>
+  </soap:Body>
+</soap:Envelope>
