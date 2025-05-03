@@ -89,7 +89,7 @@ func main() {
 	transferHandler := handler.NewTransferHandler(transferService)
 
 	cardRepo := repository.NewCardRepository(db)
-	cardService := service.NewCardService(accountRepo, cardRepo)
+	cardService := service.NewCardService(accountRepo, cardRepo, userRepo, smtpClient)
 	cardHandler := handler.NewCardHandler(cardService)
 
 	http.Handle("/accounts", handler.AuthMiddleware(accountHandler))

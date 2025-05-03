@@ -52,7 +52,10 @@ func (s *CardService) GenerateCard(userID, accountID string) (*models.Card, erro
 	cvvHash, _ := utils.HashCVV(cvv)
 
 	hmacInput := cardNumber + fmt.Sprintf("%02d", expiryMonth) + fmt.Sprintf("%d", expiryYear)
-	hmac, _ := utils.GenerateHMAC(hmacInput)
+	hmac, err := utils.GenerateHMAC(hmacInput)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate HMAC: %w", err)
+	}
 
 	card := &models.Card{
 		ID:             uuid.New().String(),
