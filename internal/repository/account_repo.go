@@ -150,3 +150,28 @@ func (r *AccountRepository) SubtractFromBalance(accountID string, amount float64
 
 	return newBalance, nil
 }
+
+// Получить сумму по всем счетам пользователя
+func (r *AccountRepository) GetTotalBalanceByUserID(userID string) (float64, error) {
+	var total float64
+	err := r.DB.QueryRow(`
+		SELECT COALESCE(SUM(balance), 0)
+		FROM accounts
+		WHERE user_id = $1
+	`, userID).Scan(&total)
+	return total, err
+}
+
+func (r *AccountRepository) GetBalanceByID(accountID string) (float64, error) {
+	var balance float64
+	err := r.DB.QueryRow(`
+		SELECT balance
+		FROM accounts
+		WHERE id = $1
+	`, accountID).Scan(&balance)
+	if err != nil {
+		log.WithError(err).Error("Failed to get account balance by ID")
+		return 0, errors.New("account not found")
+	}
+	return balance, nil
+}

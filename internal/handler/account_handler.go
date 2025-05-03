@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"fin_service/internal/service"
@@ -65,6 +66,8 @@ func (h *AccountHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.getTransactionHistory(w, r, userID)
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/analytics"):
 		h.getAnalytics(w, r, userID)
+	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/predict"):
+		h.predictBalance(w, r, userID)
 	default:
 		http.NotFound(w, r)
 	}
@@ -235,6 +238,35 @@ func (h *AccountHandler) getAnalytics(w http.ResponseWriter, r *http.Request, us
 		"income":     income,
 		"expense":    expense,
 	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (h *AccountHandler) predictBalance(w http.ResponseWriter, r *http.Request, userID string) {
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) != 4 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	daysStr := r.URL.Query().Get("days")
+	days, _ := strconv.Atoi(daysStr)
+	if days < 1 || days > 365 {
+		http.Error(w, "Days must be between 1 and 365", http.StatusBadRequest)
+		return
+	}
+
+	current, predicted, err := h.AccountService.PredictBalance(userID, days)
+	if err != nil {
+		http.Error(w, "Failed to calculate forecast", http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]interface{}{
+		"days":              days,
+		"current_balance":   current,
+		"predicted_balance": predicted,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }

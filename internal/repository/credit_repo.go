@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fin_service/internal/models"
+	"time"
 )
 
 type CreditRepository struct {
@@ -65,4 +66,69 @@ func (r *CreditRepository) GetCreditOwner(creditID string) (string, error) {
 		return "", err
 	}
 	return userID, nil
+}
+
+// Получить предстоящие платежи пользователя
+func (r *CreditRepository) GetUpcomingPayments(userID string, until time.Time) ([]*models.PaymentSchedule, error) {
+	query := `
+		SELECT ps.id, ps.credit_id, ps.due_date, ps.amount, ps.paid, ps.paid_at
+		FROM payment_schedules ps
+		JOIN credits c ON ps.credit_id = c.id
+		WHERE c.user_id = $1 AND ps.paid = false AND ps.due_date <= $2
+		ORDER BY ps.due_date
+	`
+
+	rows, err := r.DB.Query(query, userID, until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var payments []*models.PaymentSchedule
+	for rows.Next() {
+		var p models.PaymentSchedule
+		err := rows.Scan(&p.ID, &p.CreditID, &p.DueDate, &p.Amount, &p.Paid, &p.PaidAt)
+		if err != nil {
+			continue
+		}
+		payments = append(payments, &p)
+	}
+	return payments, nil
+}
+
+func (r *CreditRepository) GetDuePayments(before time.Time) ([]*models.PaymentSchedule, error) {
+	rows, err := r.DB.Query(`
+		SELECT id, credit_id, due_date, amount, paid, paid_at
+		FROM payment_schedules
+		WHERE paid = false AND due_date <= $1
+	`, before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var payments []*models.PaymentSchedule
+	for rows.Next() {
+		var p models.PaymentSchedule
+		err := rows.Scan(&p.ID, &p.CreditID, &p.DueDate, &p.Amount, &p.Paid, &p.PaidAt)
+		if err != nil {
+			continue
+		}
+		payments = append(payments, &p)
+	}
+	return payments, nil
+}
+
+func (r *CreditRepository) GetAccountIDByCreditID(creditID string) (string, error) {
+	var accountID string
+	err := r.DB.QueryRow(`SELECT account_id FROM credits WHERE id = $1`, creditID).Scan(&accountID)
+	return accountID, err
+}
+
+func (r *CreditRepository) MarkPaymentAsPaid(paymentID string) error {
+	_, err := r.DB.Exec(`
+		UPDATE payment_schedules SET paid = true, paid_at = CURRENT_TIMESTAMP
+		WHERE id = $1
+	`, paymentID)
+	return err
 }

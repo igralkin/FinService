@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"fin_service/internal/handler"
 	"fin_service/internal/integration"
@@ -47,7 +48,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to get key rate: %v", err)
 	}
-	fmt.Printf("Current Central Bank key rate: %.2f%%\n", rate)
+	fmt.Printf("Current our bank credit rate: %.2f%%\n", rate)
 
 	// --- Инициализация SMTP ---
 	smtpClient, err := integration.NewSMTPClientFromEnv()
@@ -81,8 +82,9 @@ func main() {
 	accountRepo := repository.NewAccountRepository(db)
 	txRepo := repository.NewTransactionRepository(db)
 	transferRepo := repository.NewTransferRepository(db, txRepo)
+	creditRepo := repository.NewCreditRepository(db)
 
-	accountService := service.NewAccountService(accountRepo, userRepo, smtpClient, txRepo)
+	accountService := service.NewAccountService(accountRepo, userRepo, txRepo, smtpClient, creditRepo)
 	transferService := service.NewTransferService(transferRepo, accountRepo, userRepo, smtpClient)
 
 	accountHandler := handler.NewAccountHandler(accountService)
@@ -92,7 +94,6 @@ func main() {
 	cardService := service.NewCardService(accountRepo, cardRepo, userRepo, txRepo, smtpClient)
 	cardHandler := handler.NewCardHandler(cardService)
 
-	creditRepo := repository.NewCreditRepository(db)
 	creditService := service.NewCreditService(accountRepo, creditRepo, userRepo, smtpClient)
 	creditHandler := handler.NewCreditHandler(creditService)
 
@@ -109,9 +110,13 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+	// Запуск шедулера
+	scheduler := service.NewPaymentScheduler(creditRepo, accountRepo, txRepo)
+	scheduler.RunEvery(12 * time.Hour)
 
 	log.Infof("Starting HTTP server on port %s...", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatalf("HTTP server failed: %v", err)
 	}
+
 }

@@ -15,19 +15,22 @@ type AccountService struct {
 	UserRepo    *repository.UserRepository
 	EmailSender integration.EmailSender
 	TxRepo      *repository.TransactionRepository
+	CreditRepo  *repository.CreditRepository
 }
 
 func NewAccountService(
-	accountRepo *repository.AccountRepository,
+	repo *repository.AccountRepository,
 	userRepo *repository.UserRepository,
-	emailSender integration.EmailSender,
 	txRepo *repository.TransactionRepository,
+	emailSender integration.EmailSender,
+	creditRepo *repository.CreditRepository,
 ) *AccountService {
 	return &AccountService{
-		Repo:        accountRepo,
+		Repo:        repo,
 		UserRepo:    userRepo,
-		EmailSender: emailSender,
 		TxRepo:      txRepo,
+		EmailSender: emailSender,
+		CreditRepo:  creditRepo,
 	}
 }
 
@@ -199,4 +202,30 @@ func (s *AccountService) GetAnalytics(userID, accountID, monthStr string) (float
 	}
 
 	return income, expense, nil
+}
+
+// Сервис: расчёт прогноза
+func (s *AccountService) PredictBalance(userID string, days int) (float64, float64, error) {
+	if days < 1 || days > 365 {
+		return 0, 0, errors.New("invalid forecast period")
+	}
+
+	current, err := s.Repo.GetTotalBalanceByUserID(userID)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	until := time.Now().AddDate(0, 0, days)
+	payments, err := s.CreditRepo.GetUpcomingPayments(userID, until)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var totalPayments float64
+	for _, p := range payments {
+		totalPayments += p.Amount
+	}
+
+	predicted := current - totalPayments
+	return current, predicted, nil
 }

@@ -9,14 +9,14 @@ fin_service/
 
 ├── integration/
 │   └── cbr/
-│       ├── cbr.go                  # Модуль получения ставки ЦБ
+│       ├── cbr.go                  # Модуль получения ставки ЦБ (ключевая + маржа)
 │       └── cbr_test.go
 
 ├── internal/
 │   ├── handler/
 │   │   ├── register_handler.go     # POST /register
 │   │   ├── login_handler.go        # POST /login
-│   │   ├── account_handler.go      # POST /accounts, /{id}/deposit, /{id}/withdraw, GET /accounts, /balance
+│   │   ├── account_handler.go      # POST /accounts, /{id}/deposit, /{id}/withdraw, /predict
 │   │   ├── transfer_handler.go     # POST /transfers
 │   │   ├── card_handler.go         # POST /cards, GET /cards, POST /cards/{id}/pay
 │   │   └── credit_handler.go       # POST /credits, GET /credits/{id}/schedule
@@ -24,18 +24,19 @@ fin_service/
 │   ├── service/
 │   │   ├── user_service.go         # Регистрация: проверка, хеш, welcome-письмо
 │   │   ├── auth_service.go         # Аутентификация: JWT, письмо о входе
-│   │   ├── account_service.go      # Счета: логика создания, операций, писем, логов
+│   │   ├── account_service.go      # Счета: логика создания, операций, писем, прогноз
 │   │   ├── transfer_service.go     # Переводы: валидация, письма, вызов транзакции
 │   │   ├── card_service.go         # Карты: генерация, шифрование, оплата, уведомления
-│   │   └── credit_service.go       # Кредиты: аннуитет, график, письмо, проверка
+│   │   ├── credit_service.go       # Кредиты: аннуитет, график, письмо, валидация
+│   │   └── scheduler.go            # Шедулер: автосписание по кредитам, штрафы
 
 │   ├── repository/
 │   │   ├── user_repo.go            # Пользователи: поиск, проверка, email
-│   │   ├── account_repo.go         # Счета: работа с балансами
+│   │   ├── account_repo.go         # Счета: баланс, транзакции
 │   │   ├── transaction_repo.go     # INSERT в transactions
 │   │   ├── transfer_repo.go        # Перевод: транзакция изменения балансов + логи
 │   │   ├── card_repo.go            # Карты: сохранение, выборка, поиск по ID
-│   │   └── credit_repo.go          # Кредиты и графики: INSERT, выборка, валидация владельца
+│   │   └── credit_repo.go          # Кредиты и графики: INSERT, выборка, автообработка
 
 │   ├── integration/
 │   │   └── smtp.go                 # Отправка писем: welcome, вход, операции, карта, кредит
@@ -47,7 +48,7 @@ fin_service/
 │       ├── card.go                 # Структура Card: PGP-поля, bcrypt, HMAC
 │       └── credit.go               # Структура Credit и PaymentSchedule
 
-├── pkg/                            # Общие библиотеки
+├── pkg/                            # Общие библиотеки (опц.)
 │
 └── utils/
     ├── env.go                      # Загрузка переменных окружения из .env
@@ -610,3 +611,47 @@ Authorization: Bearer <token>
 - `401 Unauthorized` — если токен отсутствует или некорректен
 - `403 Forbidden` — при попытке получить чужой график
 - `400 Bad Request` — при ошибке в теле запроса
+
+
+## Прогноз баланса
+
+Позволяет пользователю получить прогноз своего баланса с учётом ожидаемых платежей по кредитам.
+
+### GET /accounts/{accountId}/predict?days=N
+
+**Параметры:**
+- `days` — число дней вперёд (от 1 до 365)
+
+**Пример запроса:**
+```http
+GET /accounts/{account_id}/predict?days=90
+Authorization: Bearer <jwt>
+```
+
+**Пример ответа:**
+```json
+{
+  "days": 90,
+  "current_balance": 85000.0,
+  "predicted_balance": 73512.3
+}
+```
+Что учитывается:
+- Текущий баланс по всем счетам пользователя
+- Все ожидаемые платежи по кредитам, у которых due_date <= now + days и paid = false
+
+Ошибки:
+- `400 Bad Request` — если days < 1 или > 365
+- `500 Internal Server Error` — при сбое БД
+
+## Автоматическое списание платежей (шедулер)
+
+Шедулер запускается каждые 12 часов и:
+
+- Находит все неоплаченные платежи, у которых `due_date <= текущая дата`
+- Списывает средства со счёта
+- Если средств недостаточно — начисляет штраф 10% от суммы
+
+Платёж помечается как `paid = true`, если оплата прошла успешно.
+
+Штрафы добавляются в таблицу `transactions` с операцией `penalty`.
