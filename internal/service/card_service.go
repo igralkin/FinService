@@ -38,6 +38,7 @@ func NewCardService(
 		EmailSender: emailSender,
 	}
 }
+
 func (s *CardService) GenerateCard(userID, accountID string) (*models.Card, error) {
 	account, err := s.AccountRepo.GetAccountByID(accountID)
 	if err != nil {
@@ -53,10 +54,25 @@ func (s *CardService) GenerateCard(userID, accountID string) (*models.Card, erro
 	expiryYear := expiry.Year()
 	cvv := fmt.Sprintf("%03d", rand.Intn(1000))
 
-	numberEnc, _ := utils.EncryptPGP(cardNumber)
-	monthEnc, _ := utils.EncryptPGP(fmt.Sprintf("%02d", expiryMonth))
-	yearEnc, _ := utils.EncryptPGP(fmt.Sprintf("%d", expiryYear))
-	cvvHash, _ := utils.HashCVV(cvv)
+	numberEnc, err := utils.EncryptPGP(cardNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt card number: %w", err)
+	}
+
+	monthEnc, err := utils.EncryptPGP(fmt.Sprintf("%02d", expiryMonth))
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt expiry month: %w", err)
+	}
+
+	yearEnc, err := utils.EncryptPGP(fmt.Sprintf("%d", expiryYear))
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt expiry year: %w", err)
+	}
+
+	cvvHash, err := utils.HashCVV(cvv)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash CVV: %w", err)
+	}
 
 	hmacInput := cardNumber + fmt.Sprintf("%02d", expiryMonth) + fmt.Sprintf("%d", expiryYear)
 	hmac, err := utils.GenerateHMAC(hmacInput)
@@ -81,8 +97,7 @@ func (s *CardService) GenerateCard(userID, accountID string) (*models.Card, erro
 		return nil, errors.New("could not generate card")
 	}
 
-	email, err := s.UserRepo.FindEmailByUserID(userID)
-	if err == nil {
+	if email, err := s.UserRepo.FindEmailByUserID(userID); err == nil {
 		_ = s.EmailSender.SendCardCreatedEmail(email)
 	}
 
@@ -117,16 +132,7 @@ func (s *CardService) PayWithCard(userID, cardID string, amount float64, descrip
 	if _, err := s.AccountRepo.SubtractFromBalance(card.AccountID, amount); err != nil {
 		return err
 	}
-	/*
-		tx := &models.Transaction{
-			ID:          uuid.New().String(),
-			AccountID:   card.AccountID,
-			Operation:   "withdraw",
-			Amount:      amount,
-			Description: "Card payment: " + description,
-			CreatedAt:   time.Now(),
-		}
-	*/
+
 	if err := s.TxRepo.LogTransaction(card.AccountID, "withdraw", amount, "Card payment: "+description); err != nil {
 		log.WithError(err).Error("Failed to log card payment transaction")
 	}
