@@ -19,6 +19,7 @@ type EmailSender interface {
 	SendTransferReceivedEmail(to string, amount float64, fromAccountID string) error
 	SendCardCreatedEmail(to string) error
 	SendCardPaymentEmail(to string) error
+	SendCreditIssuedEmail(to string) error
 }
 
 type SMTPClient struct {
@@ -242,5 +243,14 @@ func (s *SMTPClient) SendCardPaymentEmail(to string) error {
 	m.SetHeader("To", to)
 	m.SetHeader("Subject", "Card Payment Processed")
 	m.SetBody("text/plain", "Your card payment has been successfully processed.")
+	return gomail.NewDialer(s.Host, s.Port, s.User, s.Password).DialAndSend(m)
+}
+
+func (s *SMTPClient) SendCreditIssuedEmail(to string) error {
+	m := gomail.NewMessage()
+	m.SetHeader("From", s.From)
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", "Credit Issued")
+	m.SetBody("text/plain", "Your loan has been successfully issued. You can view the payment schedule in your account.")
 	return gomail.NewDialer(s.Host, s.Port, s.User, s.Password).DialAndSend(m)
 }

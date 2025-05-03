@@ -1,21 +1,21 @@
 -- Включить расширение pgcrypto для генерации UUID (если еще не включено)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Создание таблицы пользователей
+-- Таблица пользователей
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT NOT NULL UNIQUE,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL
 );
--- Создание таблицы счетов
+-- Таблица банковских счетов
 CREATE TABLE accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     balance NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
--- Создание таблицы транзакций
+-- Таблица транзакций
 CREATE TABLE transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID NOT NULL REFERENCES accounts(id),
@@ -24,7 +24,7 @@ CREATE TABLE transactions (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     description TEXT
 );
--- Создание таблицы банковских карт
+-- Таблица банковских карт
 CREATE TABLE cards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -35,4 +35,25 @@ CREATE TABLE cards (
     cvv_hash TEXT NOT NULL,           -- bcrypt от CVV
     hmac TEXT NOT NULL,               -- HMAC всех полей
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Таблица кредитов
+CREATE TABLE credits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    account_id UUID NOT NULL REFERENCES accounts(id),
+    amount NUMERIC(12,2) NOT NULL,
+    term_months INT NOT NULL,
+    interest_rate NUMERIC(5,2) NOT NULL, -- Годовая ставка (например, 12.5)
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Таблица графика платежей
+CREATE TABLE payment_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    credit_id UUID NOT NULL REFERENCES credits(id) ON DELETE CASCADE,
+    due_date DATE NOT NULL,
+    amount NUMERIC(12,2) NOT NULL,
+    paid BOOLEAN DEFAULT FALSE,
+    paid_at TIMESTAMP
 );

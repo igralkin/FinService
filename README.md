@@ -5,7 +5,7 @@
 fin_service/
 ├── main.go                         # Точка входа: запуск сервера, инициализация компонентов
 ├── go.mod                          # Go-модули и зависимости
-├── .env                            # Конфигурация: SMTP, DB, JWT_SECRET и т.д.
+├── .env                            # Конфигурация: SMTP, DB, JWT_SECRET, HMAC_SECRET и т.д.
 
 ├── integration/
 │   └── cbr/
@@ -17,33 +17,43 @@ fin_service/
 │   │   ├── register_handler.go     # POST /register
 │   │   ├── login_handler.go        # POST /login
 │   │   ├── account_handler.go      # POST /accounts, /{id}/deposit, /{id}/withdraw, GET /accounts, /balance
-│   │   └── transfer_handler.go     # POST /transfers
+│   │   ├── transfer_handler.go     # POST /transfers
+│   │   ├── card_handler.go         # POST /cards, GET /cards, POST /cards/{id}/pay
+│   │   └── credit_handler.go       # POST /credits, GET /credits/{id}/schedule
 
 │   ├── service/
 │   │   ├── user_service.go         # Регистрация: проверка, хеш, welcome-письмо
 │   │   ├── auth_service.go         # Аутентификация: JWT, письмо о входе
 │   │   ├── account_service.go      # Счета: логика создания, операций, писем, логов
-│   │   └── transfer_service.go     # Переводы: валидация, письма, вызов транзакции
+│   │   ├── transfer_service.go     # Переводы: валидация, письма, вызов транзакции
+│   │   ├── card_service.go         # Карты: генерация, шифрование, оплата, уведомления
+│   │   └── credit_service.go       # Кредиты: аннуитет, график, письмо, проверка
 
 │   ├── repository/
 │   │   ├── user_repo.go            # Пользователи: поиск, проверка, email
 │   │   ├── account_repo.go         # Счета: работа с балансами
 │   │   ├── transaction_repo.go     # INSERT в transactions
-│   │   └── transfer_repo.go        # Перевод: транзакция изменения балансов + логи
+│   │   ├── transfer_repo.go        # Перевод: транзакция изменения балансов + логи
+│   │   ├── card_repo.go            # Карты: сохранение, выборка, поиск по ID
+│   │   └── credit_repo.go          # Кредиты и графики: INSERT, выборка, валидация владельца
 
 │   ├── integration/
-│   │   └── smtp.go                 # Отправка писем: welcome, вход, депозит, снятие, переводы
+│   │   └── smtp.go                 # Отправка писем: welcome, вход, операции, карта, кредит
 
 │   └── models/
 │       ├── user.go                 # Структура User, JSON, валидация
 │       ├── account.go              # Структура Account
-│       └── transaction.go          # Структура Transaction
+│       ├── transaction.go          # Структура Transaction
+│       ├── card.go                 # Структура Card: PGP-поля, bcrypt, HMAC
+│       └── credit.go               # Структура Credit и PaymentSchedule
 
-├── pkg/                            # Общие библиотеки (если появятся)
+├── pkg/                            # Общие библиотеки
 │
 └── utils/
-    └── env.go                      # Загрузка переменных окружения из .env
-
+    ├── env.go                      # Загрузка переменных окружения из .env
+    ├── luhn.go                     # Алгоритм Луна для генерации номера карты
+    ├── pgp.go                      # Временное шифрование PGP и маскировка номера
+    └── loan.go                     # Расчёт аннуитетного платежа
 
 ```
 
@@ -534,3 +544,69 @@ CVV и полный номер карты не возвращаются.
 - `401 Unauthorized` — при отсутствии токена
 - `403 Forbidden` — если карта чужая
 - `400 Bad Request` — если карта истекла или средств недостаточно
+
+
+## Кредитование
+
+Реализованы основные функции кредитной системы: оформление кредита, генерация графика платежей, просмотр графика.
+
+### POST /credits
+
+Оформление нового кредита. Требуется аутентификация (JWT).
+
+**Тело запроса:**
+```json
+{
+  "account_id": "414ac401-f3c7-42f5-b500-ae10eaca4d2a",
+  "amount": 100000.0,
+  "term_months": 12
+}
+```
+Пример ответа:
+```json
+{
+  "message": "Credit created successfully"
+}
+```
+Что происходит:
+
+- Проверяется, принадлежит ли счет пользователю
+- Расчитывается ежемесячный аннуитетный платёж
+- Формируется график платежей и сохраняется в таблицу payment_schedules
+- В базу добавляется запись о кредите
+- На email пользователя отправляется уведомление
+
+GET /credits/{credit_id}/schedule
+
+Получение графика платежей по конкретному кредиту. Только для владельца кредита.
+
+Пример запроса:
+```http
+GET /credits/0bfe8ac7-a123-498a-8f18-1930fe5b4f29/schedule
+Authorization: Bearer <token>
+```
+Пример ответа:
+```json
+{
+  "schedule": [
+    {
+      "id": "c2f4de79-3c77-42a0-b84b-2fc0155b5617",
+      "credit_id": "0bfe8ac7-a123-498a-8f18-1930fe5b4f29",
+      "due_date": "2025-06-01T00:00:00Z",
+      "amount": 8923.41,
+      "paid": false,
+      "paid_at": null
+    },
+    ...
+  ]
+}
+```
+Что возвращается:
+- Каждая строка графика содержит дату, сумму, статус оплаты
+- Записи отсортированы по возрастанию даты
+- Для уже оплаченных платежей будет заполнено поле paid_at
+
+Ошибки:
+- `401 Unauthorized` — если токен отсутствует или некорректен
+- `403 Forbidden` — при попытке получить чужой график
+- `400 Bad Request` — при ошибке в теле запроса
