@@ -24,3 +24,15 @@ CREATE TABLE transactions (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     description TEXT
 );
+-- Создание таблицы банковских карт
+CREATE TABLE cards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    number_enc TEXT NOT NULL,         -- PGP-шифрованный номер
+    expiry_month_enc TEXT NOT NULL,   -- PGP-шифрованный месяц
+    expiry_year_enc TEXT NOT NULL,    -- PGP-шифрованный год
+    cvv_hash TEXT NOT NULL,           -- bcrypt от CVV
+    hmac TEXT NOT NULL,               -- HMAC всех полей
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
