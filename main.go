@@ -89,13 +89,14 @@ func main() {
 	transferHandler := handler.NewTransferHandler(transferService)
 
 	cardRepo := repository.NewCardRepository(db)
-	cardService := service.NewCardService(accountRepo, cardRepo, userRepo, smtpClient)
+	cardService := service.NewCardService(accountRepo, cardRepo, userRepo, txRepo, smtpClient)
 	cardHandler := handler.NewCardHandler(cardService)
 
 	http.Handle("/accounts", handler.AuthMiddleware(accountHandler))
 	http.Handle("/accounts/", handler.AuthMiddleware(accountHandler))
 	http.Handle("/transfers", handler.AuthMiddleware(transferHandler))
 	http.Handle("/cards", handler.AuthMiddleware(cardHandler))
+	http.Handle("/cards/", handler.AuthMiddleware(cardHandler))
 
 	// --- Запуск сервера ---
 	port := os.Getenv("PORT")

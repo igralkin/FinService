@@ -19,18 +19,25 @@ type CardService struct {
 	AccountRepo *repository.AccountRepository
 	CardRepo    *repository.CardRepository
 	UserRepo    *repository.UserRepository
+	TxRepo      *repository.TransactionRepository
 	EmailSender integration.EmailSender
 }
 
-func NewCardService(accountRepo *repository.AccountRepository, cardRepo *repository.CardRepository, userRepo *repository.UserRepository, emailSender integration.EmailSender) *CardService {
+func NewCardService(
+	accountRepo *repository.AccountRepository,
+	cardRepo *repository.CardRepository,
+	userRepo *repository.UserRepository,
+	txRepo *repository.TransactionRepository,
+	emailSender integration.EmailSender,
+) *CardService {
 	return &CardService{
 		AccountRepo: accountRepo,
 		CardRepo:    cardRepo,
 		UserRepo:    userRepo,
+		TxRepo:      txRepo,
 		EmailSender: emailSender,
 	}
 }
-
 func (s *CardService) GenerateCard(userID, accountID string) (*models.Card, error) {
 	account, err := s.AccountRepo.GetAccountByID(accountID)
 	if err != nil {
@@ -85,4 +92,55 @@ func (s *CardService) GenerateCard(userID, accountID string) (*models.Card, erro
 	}).Info("Card successfully generated")
 
 	return card, nil
+}
+
+func (s *CardService) GetUserCards(userID string) ([]*models.Card, error) {
+	return s.CardRepo.GetCardsByUserID(userID)
+}
+
+func (s *CardService) PayWithCard(userID, cardID string, amount float64, description string) error {
+	card, err := s.CardRepo.GetCardByID(cardID)
+	if err != nil {
+		return err
+	}
+	if card.UserID != userID {
+		return errors.New("unauthorized card access")
+	}
+
+	monthStr, _ := utils.DecryptPGP(card.ExpiryMonthEnc)
+	yearStr, _ := utils.DecryptPGP(card.ExpiryYearEnc)
+	expiryTime, _ := time.Parse("2006-01", yearStr+"-"+monthStr)
+	if time.Now().After(expiryTime.AddDate(0, 1, -1)) {
+		return errors.New("card is expired")
+	}
+
+	if _, err := s.AccountRepo.SubtractFromBalance(card.AccountID, amount); err != nil {
+		return err
+	}
+	/*
+		tx := &models.Transaction{
+			ID:          uuid.New().String(),
+			AccountID:   card.AccountID,
+			Operation:   "withdraw",
+			Amount:      amount,
+			Description: "Card payment: " + description,
+			CreatedAt:   time.Now(),
+		}
+	*/
+	if err := s.TxRepo.LogTransaction(card.AccountID, "withdraw", amount, "Card payment: "+description); err != nil {
+		log.WithError(err).Error("Failed to log card payment transaction")
+	}
+
+	if email, err := s.UserRepo.FindEmailByUserID(userID); err == nil {
+		_ = s.EmailSender.SendCardPaymentEmail(email)
+	}
+
+	log.WithFields(log.Fields{
+		"user_id": userID,
+		"card_id": card.ID,
+		"amount":  amount,
+		"account": card.AccountID,
+	}).Info("Card payment processed")
+
+	return nil
 }

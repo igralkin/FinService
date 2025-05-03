@@ -18,6 +18,7 @@ type EmailSender interface {
 	SendTransferSentEmail(to string, amount float64, toAccountID string) error
 	SendTransferReceivedEmail(to string, amount float64, fromAccountID string) error
 	SendCardCreatedEmail(to string) error
+	SendCardPaymentEmail(to string) error
 }
 
 type SMTPClient struct {
@@ -232,4 +233,14 @@ func (s *SMTPClient) SendCardCreatedEmail(to string) error {
 
 	log.WithField("to", to).Info("Card creation email sent successfully")
 	return nil
+}
+
+func (s *SMTPClient) SendCardPaymentEmail(to string) error {
+	log.WithField("to", to).Info("Sending card payment email")
+	m := gomail.NewMessage()
+	m.SetHeader("From", s.From)
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", "Card Payment Processed")
+	m.SetBody("text/plain", "Your card payment has been successfully processed.")
+	return gomail.NewDialer(s.Host, s.Port, s.User, s.Password).DialAndSend(m)
 }

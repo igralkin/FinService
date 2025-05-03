@@ -15,3 +15,11 @@ func DecryptPGP(ciphertext string) (string, error) {
 	}
 	return ciphertext, nil
 }
+
+func MaskCardNumber(cipher string) string {
+	decrypted, err := DecryptPGP(cipher)
+	if err != nil || len(decrypted) < 4 {
+		return "**** **** **** ????"
+	}
+	return "**** **** **** " + decrypted[len(decrypted)-4:]
+}
