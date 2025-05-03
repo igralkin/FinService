@@ -17,6 +17,7 @@ type EmailSender interface {
 	SendWithdrawalEmail(to string, amount float64) error
 	SendTransferSentEmail(to string, amount float64, toAccountID string) error
 	SendTransferReceivedEmail(to string, amount float64, fromAccountID string) error
+	SendCardCreatedEmail(to string) error
 }
 
 type SMTPClient struct {
@@ -208,5 +209,27 @@ func (s *SMTPClient) SendTransferReceivedEmail(to string, amount float64, fromAc
 		return err
 	}
 
+	return nil
+}
+
+// SendCardCreatedEmail sends a notification when a new card is created.
+func (s *SMTPClient) SendCardCreatedEmail(to string) error {
+	log.WithField("to", to).Info("Sending card creation email")
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", s.From)
+	m.SetHeader("To", to)
+	m.SetHeader("Subject", "New Virtual Card Created")
+	m.SetBody("text/plain", "Your new virtual bank card has been successfully created.")
+
+	d := gomail.NewDialer(s.Host, s.Port, s.User, s.Password)
+	d.SSL = s.SSL
+
+	if err := d.DialAndSend(m); err != nil {
+		log.WithError(err).Error("Failed to send card creation email")
+		return err
+	}
+
+	log.WithField("to", to).Info("Card creation email sent successfully")
 	return nil
 }

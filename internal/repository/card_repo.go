@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"fin_service/internal/models"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -32,8 +33,8 @@ func (r *CardRepository) SaveCard(card *models.Card) error {
 		card.UserID,
 		card.AccountID,
 		card.NumberEnc,
-		card.ExpiryMonth,  // временно, позже зашифруем
-		card.ExpiryYear,   // временно, позже зашифруем
+		card.ExpiryMonthEnc,
+		card.ExpiryYearEnc,
 		card.CVVHash,
 		card.HMAC,
 		card.CreatedAt,

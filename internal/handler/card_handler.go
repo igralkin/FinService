@@ -14,10 +14,8 @@ type CardRequest struct {
 }
 
 type CardResponse struct {
-	CardID      string `json:"card_id"`
-	CreatedAt   string `json:"created_at"`
-	ExpiryMonth int    `json:"expiry_month"`
-	ExpiryYear  int    `json:"expiry_year"`
+	CardID    string `json:"card_id"`
+	CreatedAt string `json:"created_at"`
 }
 
 type CardHandler struct {
@@ -54,10 +52,8 @@ func (h *CardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := CardResponse{
-		CardID:      card.ID,
-		CreatedAt:   card.CreatedAt.Format("2006-01-02 15:04:05"),
-		ExpiryMonth: card.ExpiryMonth,
-		ExpiryYear:  card.ExpiryYear,
+		CardID:    card.ID,
+		CreatedAt: card.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
